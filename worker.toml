@@ -1,0 +1,10 @@
+[[worker]]
+
+[worker.config]
+id = "weather-worker"
+enabled = true
+timeout = 30
+retries = 3
+secret = "f678cc213bcc2cd26d794b3fe28eaf14"
+[worker.local_source]
+packages = [ "./weather",]
