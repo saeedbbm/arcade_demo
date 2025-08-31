@@ -14,7 +14,7 @@ class RateLimiter:
     
     In production, consider using Redis-based distributed rate limiting
     for multi-instance deployments or async libraries like aiohttp for
-    better concurrency handling.
+    better concurrency handling
     """
     def __init__(self, calls_per_minute: int = 60) -> None:
         self.calls_per_minute = calls_per_minute
