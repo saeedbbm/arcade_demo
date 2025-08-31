@@ -1,100 +1,139 @@
 # Weather Toolkit Demos
 
-This directory contains two demos showing different levels of integration with the Weather Toolkit.
+This directory contains demos showing how to integrate with deployed Weather Toolkit tools on the Arcade platform.
 
-## 🌤️ Simple Demo (`weather_agent.py`)
+## 🌤️ Python Client Demo (`weather_agent.py`)
 
-A basic demonstration of toolkit usage without external dependencies. Perfect for understanding core functionality.
+Demonstrates how to use deployed weather tools with Arcade's Python client. Shows direct API integration patterns for developers.
 
 **Requirements:**
-- OpenWeatherMap API key
+- Deployed Weather Toolkit on Arcade platform
+- Arcade API key
 - Python 3.10+
 
 **Run:**
 ```bash
-uv run python demo/weather_agent.py
+python demo/weather_agent.py
 ```
 
-## 🤖 Advanced Demo (`langchain_agent.py`)
+## 🤖 LangChain Integration Demo (`langchain_agent.py`)
 
-Professional AI agent using LangChain for conversational weather assistance. Demonstrates production-ready agent architecture.
+Professional agent using LangChain with deployed Arcade tools. Demonstrates production-ready agent architecture with conversational weather assistance.
 
 **Requirements:**
-- OpenWeatherMap API key
-- OpenAI API key  
+- Deployed Weather Toolkit on Arcade platform
+- Arcade API key
+- OpenAI API key (for LangChain agent)
 - LangChain dependencies
 
-**Install LangChain:**
+**Setup:**
 ```bash
-uv add langchain langchain-openai langchain-community
+# Install LangChain dependencies
+uv sync --extra langchain
+
+# Create demo/.env file:
+echo "OPENAI_API_KEY=your_openai_key_here" > demo/.env
 ```
 
 **Run:**
 ```bash
-uv run python demo/langchain_agent.py
+python demo/langchain_agent.py
 ```
 
-## 🔧 Setup
+## 🐛 Bug Reproduction Demo (`bug_reproduction.py`)
 
-1. **Environment setup:**
+Demonstrates an Arcade platform serialization bug where non-empty `List[Dict]` return types fail in the runtime.
+
+**Run:**
 ```bash
-cd weather
-uv venv --seed -p 3.13
-make install
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python demo/bug_reproduction.py
 ```
 
-2. **Install optional dependencies (for advanced demo):**
+## 🔧 Setup Requirements
+
+### 1. Deploy Weather Toolkit
+
+First, ensure the weather toolkit is deployed to Arcade:
+
 ```bash
-uv add langchain langchain-openai langchain-community
+cd weather  # Navigate to toolkit directory
+cd ..       # Go to directory with worker.toml
+arcade deploy
 ```
 
-3. **Create `.env` file in the weather directory:**
-OPENWEATHERMAP_API_KEY=your_weather_key
-OPENAI_API_KEY=your_openai_key
+### 2. Environment Setup (for LangChain demo only)
 
-
-
-4. **Run demos:**
+Create `demo/.env` file:
 ```bash
-# Simple demo
-uv run python demo/weather_agent.py
+OPENAI_API_KEY=your_openai_key_here
+```
 
-# Advanced demo  
-uv run python demo/langchain_agent.py
+**Note**: The `OPENWEATHERMAP_API_KEY` is managed by Arcade's secure secret management system, not environment variables.
+
+### 3. Install Demo Dependencies
+
+```bash
+# For LangChain demo only
+uv sync --extra langchain
 ```
 
 ## 💡 What Each Demo Shows
 
-### Simple Demo
-- **Direct toolkit usage** with function calls
-- **Activity suggestions** based on weather conditions
-- **Error handling** and user-friendly output
-- **Environment variable** configuration
+### Python Client Demo (`weather_agent.py`)
+- **Direct tool usage** with `arcadepy.Arcade` client
+- **Business logic examples** (event scheduling, travel planning)
+- **Flask integration patterns** for web applications
+- **Real API responses** from deployed tools
+- **Error handling** and data validation
 
-### Advanced Demo
-- **LangChain integration** with tool-calling agents
+### LangChain Demo (`langchain_agent.py`)
+- **LangChain integration** with `langchain-arcade` package
 - **Conversational interface** with natural language processing
-- **Enterprise-grade error handling** and retry logic
-- **Professional agent architecture** for production use
+- **Agent-based architecture** for production use
+- **Real tool execution** through deployed Arcade tools
+- **Professional response formatting**
 
-Both demonstrate real-world usage of the Weather Toolkit in agentic applications, from basic automation to sophisticated AI assistants.
+### Bug Demo (`bug_reproduction.py`)
+- **Minimal bug reproduction** for Arcade engineering team
+- **Clear demonstration** of List[Dict] serialization issue
+- **Comparison testing** (empty vs non-empty lists)
+- **Documentation** for issue reporting
 
-## 🎯 Example Interactions
+## 🎯 Integration Patterns
 
-**Simple Demo Output:**
-🌤️ Weather Agent Demo
-Current weather in Tokyo:
-🌡️ Temperature: 28.2°C
-☁️ Condition: broken clouds
-💡 Great weather for outdoor activities!
+### Direct API Integration
+```python
+from arcadepy import Arcade
 
+client = Arcade(api_key="your_arcade_api_key")
+result = client.tools.execute(
+    tool_name="Weather.GetCurrentWeather",
+    input={"location": "London, UK"},
+    user_id="your_user_id"
+)
+```
 
-**Advanced Demo Interaction:**
-🌤️ You: What should I pack for my trip to London tomorrow?
-🤖 Weather Agent: Let me check the current weather and forecast for London...
-[Uses tools to fetch data]
-Based on the forecast showing 15°C and light rain, I recommend:
-Waterproof jacket or umbrella
-Layers for changing temperatures
-Comfortable walking shoes
+### LangChain Integration
+```python
+from langchain_arcade import ArcadeToolManager
+
+manager = ArcadeToolManager(api_key="your_arcade_api_key")
+tools = manager.get_tools(toolkits=["weather"])
+# Use tools with any LangChain agent
+```
+
+### Business Logic Integration
+```python
+def should_schedule_event(location):
+    forecast = client.tools.execute(
+        tool_name="Weather.GetForecast",
+        input={"location": location, "days": 3},
+        user_id="business_logic"
+    )
+    # Analyze forecast data for business decisions
+    return analysis_result
+```
+
+## 📊 Expected Output Examples
+
+### Python Client Demo Output:

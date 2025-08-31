@@ -1,4 +1,15 @@
-from .hello import say_hello
-from .weather import get_current_weather, get_forecast, get_weather_alerts
+from .weather import (
+    get_current_weather, 
+    get_forecast, 
+    get_weather_alerts,
+    bug_demo_empty_list,
+    bug_demo_non_empty_list
+)
 
-__all__ = ["say_hello", "get_current_weather", "get_forecast", "get_weather_alerts"]
+__all__ = [
+    "get_current_weather", 
+    "get_forecast", 
+    "get_weather_alerts",
+    "bug_demo_empty_list",
+    "bug_demo_non_empty_list"
+]

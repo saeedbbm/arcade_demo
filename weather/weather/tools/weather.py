@@ -1,19 +1,11 @@
 import os
 import requests
 from typing import Annotated, Optional, List, Any, Callable, Dict, Union
-from arcade_tdk import tool
+from arcade_tdk import tool, ToolContext
 from datetime import datetime, timezone
 from functools import wraps
 import time
 from threading import Lock
-
-# Try to load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    # dotenv not available, skip loading .env file
-    pass
 
 
 class RateLimiter:
@@ -61,23 +53,21 @@ def rate_limited(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-@tool
+@tool(requires_secrets=["OPENWEATHERMAP_API_KEY"])
 @rate_limited
 def get_current_weather(
-    location: Annotated[str, "The city and country, e.g., 'San Francisco, US'"],
-    api_key: Annotated[Optional[str], "OpenWeatherMap API key"] = None
+    context: ToolContext,
+    location: Annotated[str, "The city and country, e.g., 'San Francisco, US'"]
 ) -> Annotated[Dict[str, Any], "Current weather data including temperature, condition, etc."]:
     """
     Fetch current weather for a given location using OpenWeatherMap.
 
     Examples:
-        get_current_weather("London, UK", "your_api_key") -> {'temp': 15.0, 'condition': 'Clouds', ...}
+        get_current_weather(context, "London, UK") -> {'temp': 15.0, 'condition': 'Clouds', ...}
     """
-    # Use provided api_key or fall back to environment variable
-    if api_key is None:
-        api_key = os.getenv("OPENWEATHERMAP_API_KEY")
-        if not api_key:
-            raise ValueError("API key is required. Provide it as parameter or set OPENWEATHERMAP_API_KEY environment variable.")
+
+    # Get API key from Arcade's secure secret management
+    api_key = context.get_secret("OPENWEATHERMAP_API_KEY")
     
     url = "https://api.openweathermap.org/data/2.5/weather"
     params: Dict[str, str] = {
@@ -104,25 +94,41 @@ def get_current_weather(
     }
 
 
-@tool
+@tool(requires_secrets=["OPENWEATHERMAP_API_KEY"])
 @rate_limited
 def get_forecast(
+    context: ToolContext,
     location: Annotated[str, "The city and country, e.g., 'San Francisco, US'"],
-    api_key: Annotated[Optional[str], "OpenWeatherMap API key"] = None,
     days: Annotated[int, "Number of forecast days (1-5)"] = 5
-) -> Annotated[List[Dict[str, Any]], "List of daily forecast data"]:
+) -> Annotated[Dict[str, Any], "Forecast data with location and days list"]:
     """
     Fetch weather forecast for the next few days.
 
-    Examples:
-        get_forecast("Paris, FR", "your_api_key", 3) -> [{'date': '2025-01-27', 'temp': 20.5, ...}, ...]
-    """
-    # Use provided api_key or fall back to environment variable
-    if api_key is None:
-        api_key = os.getenv("OPENWEATHERMAP_API_KEY")
-        if not api_key:
-            raise ValueError("API key is required. Provide it as parameter or set OPENWEATHERMAP_API_KEY environment variable.")
+    Returns a dict with forecast data to work around Arcade's List[Dict] serialization bug.
     
+    Examples:
+        get_forecast(context, "Paris, FR", 3) -> {
+            "location": "Paris, FR", 
+            "requested_days": 3,
+            "forecast": [{'date': '2025-01-27', 'temp': 20.5, ...}, ...],
+            "total_days": 3
+        }
+    """
+
+    original_days_request = days
+
+    # Get API key from Arcade's secure secret management
+    try:
+        api_key = context.get_secret("OPENWEATHERMAP_API_KEY")
+    except Exception as e:
+        return {
+            "location": location,
+            "requested_days": original_days_request,
+            "forecast": [],
+            "total_days": 0,
+            "error": f"API key error: {str(e)}"
+        }
+
     if days > 5:
         days = 5  # API limitation
     
@@ -133,58 +139,108 @@ def get_forecast(
         "units": "metric"
     }
     
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+    except Exception as e:
+        return {
+            "location": location,
+            "requested_days": original_days_request,
+            "forecast": [],
+            "total_days": 0,
+            "error": f"API call error: {str(e)}"
+        }
+    
+    # Check if we have forecast data
+    if "list" not in data or not data["list"]:
+        return {
+            "location": location,
+            "requested_days": original_days_request,
+            "forecast": [],
+            "total_days": 0,
+            "error": "No forecast data available"
+        }
     
     # Group by date and get daily summaries
     daily_forecasts: Dict[str, Dict[str, Any]] = {}
-    for item in data["list"][:days * 8]:  # 8 forecasts per day (3-hour intervals)
-        date = datetime.fromtimestamp(item["dt"], timezone.utc).date().isoformat()
-        if date not in daily_forecasts:
-            daily_forecasts[date] = {
-                "date": date,
-                "temperature_min": item["main"]["temp"],
-                "temperature_max": item["main"]["temp"],
-                "condition": item["weather"][0]["main"],
-                "description": item["weather"][0]["description"],
-                "humidity": item["main"]["humidity"],
-                "wind_speed": item["wind"]["speed"]
-            }
-        else:
-            # Update min/max temperatures
-            daily_forecasts[date]["temperature_min"] = min(
-                daily_forecasts[date]["temperature_min"], 
-                item["main"]["temp"]
-            )
-            daily_forecasts[date]["temperature_max"] = max(
-                daily_forecasts[date]["temperature_max"], 
-                item["main"]["temp"]
-            )
     
-    return list(daily_forecasts.values())[:days]
+    try:
+        for item in data["list"]:
+            # Safety checks for required fields
+            if not all(key in item for key in ["dt", "main", "weather"]):
+                continue
+                
+            if not item["weather"] or not item["weather"][0]:
+                continue
+            
+            # Convert timestamp to date string
+            try:
+                date = datetime.fromtimestamp(item["dt"], timezone.utc).date().isoformat()
+            except (ValueError, OSError):
+                continue  # Skip invalid timestamps
+            
+            if date not in daily_forecasts:
+                daily_forecasts[date] = {
+                    "date": date,
+                    "temperature_min": item["main"]["temp"],
+                    "temperature_max": item["main"]["temp"],
+                    "condition": item["weather"][0]["main"],
+                    "description": item["weather"][0]["description"],
+                    "humidity": item["main"]["humidity"],
+                    "wind_speed": item.get("wind", {}).get("speed", 0)
+                }
+            else:
+                # Update min/max temperatures
+                daily_forecasts[date]["temperature_min"] = min(
+                    daily_forecasts[date]["temperature_min"], 
+                    item["main"]["temp"]
+                )
+                daily_forecasts[date]["temperature_max"] = max(
+                    daily_forecasts[date]["temperature_max"], 
+                    item["main"]["temp"]
+                )
+            
+            # Stop after we have enough days
+            if len(daily_forecasts) >= days:
+                break
+                
+    except Exception as e:
+        return {
+            "location": location,
+            "requested_days": original_days_request,
+            "forecast": [],
+            "total_days": 0,
+            "error": f"Processing error: {str(e)}"
+        }
+    
+    forecast_list = list(daily_forecasts.values())[:days]
+    
+    return {
+        "location": location,
+        "requested_days": original_days_request,
+        "forecast": forecast_list,  
+        "total_days": len(forecast_list)
+    }
 
-
-@tool
+@tool(requires_secrets=["OPENWEATHERMAP_API_KEY"])
 @rate_limited  
 def get_weather_alerts(
-    location: Annotated[str, "The city and country, e.g., 'San Francisco, US'"],
-    api_key: Annotated[Optional[str], "OpenWeatherMap API key"] = None
+    context: ToolContext,
+    location: Annotated[str, "The city and country, e.g., 'San Francisco, US'"]
 ) -> Annotated[List[Dict[str, Any]], "List of active weather alerts/warnings"]:
     """
     Fetch active weather alerts for a given location using OpenWeatherMap.
     
     Examples:
-        get_weather_alerts("Miami, US", "your_api_key") -> [{'event': 'Hurricane Warning', ...}]
+        get_weather_alerts(context, "Miami, US") -> [{'event': 'Hurricane Warning', ...}]
     """
-    # Use provided api_key or fall back to environment variable
-    if api_key is None:
-        api_key = os.getenv("OPENWEATHERMAP_API_KEY")
-        if not api_key:
-            raise ValueError("API key is required. Provide it as parameter or set OPENWEATHERMAP_API_KEY environment variable.")
-    
+    # Get API key from Arcade's secure secret management
+    api_key = context.get_secret("OPENWEATHERMAP_API_KEY")
+
     try:
-        # First get coordinates for the location
+        # Get coordinates for the location
         geocoding_url = "https://api.openweathermap.org/geo/1.0/direct"
         geocoding_params: Dict[str, Union[str, int]] = {
             "q": location,
@@ -237,3 +293,30 @@ def get_weather_alerts(
     except Exception:
         # Return empty list for any other issues with alerts
         return []
+    
+
+@tool(requires_secrets=["OPENWEATHERMAP_API_KEY"])
+def bug_demo_empty_list(
+    context: ToolContext,
+    location: Annotated[str, "Location"]
+) -> Annotated[List[Dict[str, Any]], "Empty List[Dict] - WORKS"]:
+    """
+    BUG DEMO: Empty List[Dict] works fine in Arcade runtime.
+    This function should return [] successfully.
+    """
+    return []
+
+
+@tool(requires_secrets=["OPENWEATHERMAP_API_KEY"])
+def bug_demo_non_empty_list(
+    context: ToolContext,
+    location: Annotated[str, "Location"]  
+) -> Annotated[List[Dict[str, Any]], "Non-empty List[Dict] - FAILS"]:
+    """
+    BUG DEMO: Non-empty List[Dict] fails in Arcade runtime.
+    This function should return the list but will return None due to Arcade bug.
+    
+    Expected: [{"test": "data"}]
+    Actual in Arcade: None
+    """
+    return [{"test": "data", "number": 42, "working": True}]

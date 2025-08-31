@@ -5,7 +5,7 @@ Thank you for your interest in contributing to the Weather Toolkit! This project
 ## 🚀 Quick Start
 
 1. **Fork the repository**
-2. **Clone your fork**: `git clone https://github.com/yourusername/weather-toolkit`
+2. **Clone your fork**: `git clone https://github.com/saeedbbm/weather-toolkit`
 3. **Set up development environment**:
    ```bash
    cd weather-toolkit/weather
@@ -28,7 +28,7 @@ make install
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install optional dependencies for full development
-uv add langchain langchain-openai langchain-community
+uv sync --extra langchain
 ```
 
 ## 📋 Development Guidelines
@@ -38,7 +38,7 @@ uv add langchain langchain-openai langchain-community
 - Use type annotations for all functions (mypy strict mode)
 - Run `make check` before submitting (must pass with zero errors)
 - Maintain 90%+ test coverage
-- Use proper error handling with `raise_for_status()`
+- Use proper error handling with Arcade's `ToolExecutionError`
 
 ### Available Make Commands
 - `make install` - Install dependencies and pre-commit hooks
@@ -50,16 +50,19 @@ uv add langchain langchain-openai langchain-community
 - `make bump-version` - Bump version for releases
 
 ### Adding New Tools
-
 1. **Create tool function** in `weather/tools/weather.py`:
    ```python
-   @tool
+   from arcade_tdk import tool, ToolContext
+   
+   @tool(requires_secrets=["OPENWEATHERMAP_API_KEY"])
    @rate_limited
    def your_new_tool(
-       param: Annotated[str, "Description"],
-       api_key: Annotated[Optional[str], "OpenWeatherMap API key"] = None
+       context: ToolContext,
+       param: Annotated[str, "Description"]
    ) -> Annotated[Dict[str, Any], "Return description"]:
        """Comprehensive docstring with examples."""
+       api_key = context.get_secret("OPENWEATHERMAP_API_KEY")
+       # Your implementation here
    ```
 
 2. **Add comprehensive tests** in `tests/test_weather.py`
@@ -74,6 +77,7 @@ uv add langchain langchain-openai langchain-community
 - **Edge cases**: Empty responses, rate limiting, network timeouts
 - **Type safety**: All functions must pass mypy strict checking
 - **Coverage**: Maintain >90% test coverage
+- **Arcade Integration**: Use `MockToolContext` for testing
 
 ```bash
 # Run comprehensive testing
@@ -86,11 +90,12 @@ make check          # Type checking + linting
 
 This project follows strict quality standards:
 
+- **Arcade Integration**: All tools use `@tool` decorator and `ToolContext`
+- **Secret Management**: Use `context.get_secret()` instead of environment variables
 - **Type annotations**: Every function parameter and return value
 - **Error handling**: Proper exception handling with meaningful messages
 - **Documentation**: Comprehensive docstrings with examples
 - **Performance**: Rate limiting and efficient API usage
-- **Security**: Environment-based API key management
 
 ## 🔄 Pull Request Process
 
@@ -100,8 +105,9 @@ This project follows strict quality standards:
    ```bash
    make check && make test && make coverage
    ```
-4. **Update documentation** if needed
-5. **Submit PR** with clear description of changes
+4. **Test deployment**: `arcade deploy` and verify tools work
+5. **Update documentation** if needed
+6. **Submit PR** with clear description of changes
 
 ### PR Checklist
 
@@ -110,32 +116,37 @@ This project follows strict quality standards:
 - [ ] Coverage >90% (`make coverage`)
 - [ ] Documentation updated
 - [ ] New tools have comprehensive tests
-- [ ] API keys and secrets are handled securely
+- [ ] Arcade secret management used (no `os.getenv()`)
+- [ ] Tools deploy successfully with `arcade deploy`
 
 ## 🧪 Running Demos
 
 Test your changes with the demo applications:
 
 ```bash
-# Simple demo (no external dependencies)
-uv run python demo/weather_agent.py
+# Python client demo (uses deployed tools)
+python demo/weather_agent.py
 
-# Advanced LangChain demo
-uv add langchain langchain-openai langchain-community
-uv run python demo/langchain_agent.py
+# LangChain integration demo (uses deployed tools)
+python demo/langchain_agent.py
+
+# Bug reproduction demo (for Arcade team)
+python demo/bug_reproduction.py
 ```
 
 ## 🔧 Environment Setup
 
-Create `.env` file for testing:
+### For Development/Testing
+Create `.env` file in `demo/` directory:
 
 ```bash
-# Required for testing
-OPENWEATHERMAP_API_KEY=your_test_key
-
-# Optional for LangChain demos
+# For LangChain demo only
 OPENAI_API_KEY=your_openai_key
 ```
+
+### For Arcade Deployment
+Set secrets in Arcade Dashboard:
+- `OPENWEATHERMAP_API_KEY` - Your OpenWeatherMap API key
 
 ## 🐛 Bug Reports
 
@@ -143,9 +154,10 @@ When reporting bugs, please include:
 
 - **Python version and OS**
 - **Weather toolkit version** 
+- **Arcade CLI version**
 - **Steps to reproduce** the issue
 - **Expected vs actual behavior**
-- **API responses** (redact API keys!)
+- **Tool execution results** (redact API keys!)
 - **Error tracebacks** if applicable
 
 ## 💡 Feature Requests
@@ -154,7 +166,7 @@ We welcome ideas for:
 
 - **New weather data sources** (AccuWeather, Weather.gov, etc.)
 - **Additional analysis tools** (historical data, weather patterns)
-- **AI agent integrations** (more LLM frameworks)
+- **Integration improvements** (more frameworks beyond LangChain)
 - **Performance improvements** (caching, async support)
 - **Enterprise features** (authentication, monitoring)
 
@@ -164,6 +176,7 @@ We welcome ideas for:
 - **Code examples**: Look at demo/ directory
 - **Issues**: Search existing issues before creating new ones
 - **Discussions**: Use GitHub Discussions for questions
+- **Arcade Docs**: https://docs.arcade.dev/
 
 ## 🌟 Recognition
 
@@ -181,7 +194,7 @@ This project follows these principles:
 - **Rapid iteration**: Ship fast, iterate based on feedback
 - **Production quality**: Every commit should be production-ready
 - **Developer experience**: APIs should be intuitive and well-documented
-- **AI-first design**: Built specifically for AI agent integration
+- **Arcade-first design**: Built specifically for Arcade platform integration
 - **Cross-platform**: Works seamlessly on Windows, macOS, and Linux
 
-Thank you for helping make weather data more accessible to AI applications! 🌤️
+Thank you for helping make weather data more accessible to Arcade applications! 🌤️

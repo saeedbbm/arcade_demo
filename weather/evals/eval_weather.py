@@ -104,7 +104,7 @@ def create_weather_eval_suite() -> EvalSuite:
         ],
     )
     
-    # Test 5: Location with explicit country
+    # Test 5: Explicit location query
     suite.add_case(
         name="Explicit Location Query",
         user_message="Current weather in Paris, France please",
@@ -162,8 +162,6 @@ def main():
 @tool_eval()
 def weather_eval_suite(config, base_url, model) -> EvalSuite:
     """Tool eval function for arcade-evals CLI integration."""
-    # This function signature is required by the @tool_eval decorator
-    # The parameters are provided by the arcade-evals CLI
     return create_weather_eval_suite()
 
 
